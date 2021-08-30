@@ -1,7 +1,24 @@
 from bs4 import BeautifulSoup
+import bs4
 import requests
 from operation import Operation
 import pandas as pd
+
+
+def mount_references(bs4_source):
+    refs = bs4_source.find_all('cite')
+    j_refs = {}
+    for item in refs:
+        _id = item.parent.parent.attrs['id']
+        _link = None
+        for c in item.contents:
+            if c.name == 'a':
+                _link = c.attrs['href']
+                break
+        j_refs[_id] = _link
+    
+    return j_refs
+
 
 def scrap_page():
     """
@@ -11,8 +28,9 @@ def scrap_page():
     raw_content =  BeautifulSoup(requests.get(url).text, 'html.parser')
     operations = []
     items = raw_content.find_all('li')
+    references = mount_references(raw_content)
 
-    # Ignoring elements with any HTML attribute set
+    # Keeping only the resources i've mapped
     items = [
         i for i in items 
             if not i.attrs 
@@ -39,10 +57,14 @@ def scrap_page():
     ]
     for i in items:
         operations.append(
-            Operation().mount_from_bs4(i)
+            Operation().mount_from_bs4(i, references)
         )
 
     return operations
 
-operations = [i.to_json() for i in scrap_page()]
-pd.DataFrame(operations).to_csv('pf_operations.csv', sep=',')
+operations = scrap_page()
+json_operations = operations
+for o in operations:
+    o.enrich()
+pd.DataFrame(json_operations).to_csv('pf_operations.csv', sep=',')
+
